@@ -1,0 +1,102 @@
+---
+title: "Accounts"
+description: "Patient billing accounts — the central grouping entity"
+---
+
+An **Account** is the primary organizational unit in our platform. It represents a patient billing account at a healthcare facility and serves as the container that groups together all related claims, payments, medical records, and work queue items.
+
+## What is an Account?
+
+In our entity model, an Account is simply an entity with an `Account` component:
+
+```json
+{
+  "id": "a1b2c3d4-...",
+  "Account": {
+    "name": "67890"
+  },
+  "Customer": {
+    "slug": "hospital-xyz"
+  }
+}
+```
+
+The `Account` component is minimal by design — just a name (typically the account number). Rich context comes from **child entities** linked to the account and **additional components** attached to it.
+
+## Related components
+
+| Component | Purpose |
+|-----------|---------|
+| `Account` | Core identifier — the account number/name |
+| `Customer` | Which customer this account belongs to |
+| `AccountStatus` | Work status: workstream, invoice status, narrative |
+| `AccountDocument` | Supporting documents (contracts, medical records) |
+| `Activity` | Work queue entries — appeals, outreach, follow-ups |
+
+## Account hierarchy
+
+An Account groups related entities as children:
+
+- **Account 67890**
+  - Claim 1
+    - ServiceLine A
+    - ServiceLine B
+  - Claim 2
+    - ServiceLine C
+  - Remit 1
+    - ServiceLine D
+  - MedicalRecord 1
+
+These parent-child relationships are stored as **entity edges** and can be traversed in both directions.
+
+## How Accounts are created
+
+Accounts enter the system through several paths:
+
+### 1. UCRN files (most common)
+
+Our [account creation service](/sftp/ucrn) creates Accounts from UCRN crosswalk files. Each row in a UCRN file maps an account number to a claim number. The service creates the Account entity and links the matching claims as children.
+
+### 2. Customer-specific logic
+
+Some customers have custom account creation rules. For example, one customer derives account numbers from the first 7 characters of the claim submitter ID. These rules are implemented per-customer in dedicated services.
+
+### 3. Medical records
+
+Our medical record service may create accounts when processing medical record files, matching by patient identifiers found in the filename or document metadata.
+
+## Workstreams
+
+Accounts are organized into workstreams based on the type of RCM work being performed:
+
+| Workstream | Description |
+|------------|-------------|
+| `UnderpaymentsReview` | Claims that were paid below expected amounts |
+| `DenialManagement` | Claims that were denied by the payer |
+| `RevenueIntegrity` | General revenue cycle work |
+| `PrebillReview` | Pre-submission claim review |
+| `None` | No active workstream assigned |
+
+The workstream is stored in the `AccountStatus` component and determines which queue the account appears in for users in our UI.
+
+## Account lifecycle
+
+<Steps>
+  <Step title="Created">
+    Account entity is created from a UCRN file, customer-specific logic, or medical record processing.
+  </Step>
+  <Step title="Claims linked">
+    Claims are associated as children of the Account via entity edges.
+  </Step>
+  <Step title="Remits arrive">
+    As 835 EDI files are processed, remittance payments are linked to the matching claims.
+  </Step>
+  <Step title="Work queue">
+    The Account appears in the appropriate workstream queue based on its `AccountStatus`.
+  </Step>
+  <Step title="User review">
+    A user reviews the account in our UI — files appeals, conducts outreach, or resolves the case.
+  </Step>
+</Steps>
+
+Each step creates an immutable checkpoint, providing a full audit trail of every change to the account and its children.

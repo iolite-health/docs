@@ -1,97 +1,63 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "iolite Documentation"
+description: "The technology platform for modern revenue cycle management"
 ---
 
-## Setting up
+<div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+  <img src="/images/friendly-martian.png" alt="iolite Martian" width="64" />
+  <span style={{ fontSize: '1.1rem' }}>
+    Our platform ingests claims, remittances, and medical records via SFTP, processes them through a reactive data engine, and surfaces everything to users in real time.
+  </span>
+</div>
 
-Get your documentation site up and running in minutes.
-
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
+## How it works
 
 <Columns cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="SFTP & Data Ingestion"
+    icon="upload"
+    href="/sftp/overview"
   >
-    Edit your docs locally and preview them in real time.
+    Customers upload EDI files, UCRN crosswalks, and medical records via SFTP. Files are automatically parsed and converted into structured entities.
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Data Engine"
+    icon="atom"
+    href="/nebula/overview"
   >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+    Our real-time Entity-Component-System engine stores, processes, and streams healthcare data to users and background services.
   </Card>
 </Columns>
 
-## Create beautiful pages
+## Key concepts
 
-Everything you need to create world-class documentation.
+<CardGroup cols={3}>
+  <Card title="EDI" icon="file-lines" href="/sftp/edi">
+    Electronic Data Interchange — standardized healthcare claim and payment files (837/835).
+  </Card>
+  <Card title="UCRN" icon="link" href="/sftp/ucrn">
+    Universal Claim Record Number — crosswalk files that link account numbers to claim numbers.
+  </Card>
+  <Card title="Accounts" icon="folder-open" href="/sftp/accounts">
+    Patient billing accounts that group claims, payments, and medical records together.
+  </Card>
+</CardGroup>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## Data flow
 
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<Steps>
+  <Step title="Ingest">
+    Customer uploads a file via SFTP. It lands in cloud storage.
+  </Step>
+  <Step title="Parse">
+    A file processor validates the path, routes by folder type (EDI, UCRN, MedicalRecords), and parses the file into structured data.
+  </Step>
+  <Step title="Persist">
+    Parsed data is written to our data engine as entities. An immutable checkpoint is created for every change.
+  </Step>
+  <Step title="Fan out">
+    Changes propagate in real time via two paths:
+    - **WebSocket → Users** — fire-and-forget push to our UI layer
+    - **Message queue → Services** — durable delivery to background services for further processing
+  </Step>
+</Steps>

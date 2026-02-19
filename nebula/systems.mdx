@@ -1,0 +1,75 @@
+---
+title: "Background Services"
+description: "Services that subscribe to entity changes and process them in real time"
+---
+
+Background services connect to our data engine, subscribe to entities matching a query, and process changes as they happen. They are the "S" in Entity-Component-System.
+
+## How services work
+
+Every service follows this pattern:
+
+<Steps>
+  <Step title="Connect">
+    Authenticates and establishes a real-time connection to the data engine.
+  </Step>
+  <Step title="Subscribe">
+    Sends a query defining which entities it cares about (e.g., "entities with an EDI component and a Customer component").
+  </Step>
+  <Step title="Receive">
+    Gets entity change events as they happen — either single changes or batches.
+  </Step>
+  <Step title="Process">
+    Runs business logic on the changed entities. May create new entities, update existing ones, or link entities together.
+  </Step>
+  <Step title="Acknowledge">
+    Confirms the change was processed. This prevents re-delivery.
+  </Step>
+</Steps>
+
+## Guaranteed delivery
+
+Services receive changes through a **durable message queue**. This provides:
+
+| Feature | Benefit |
+|---------|---------|
+| **Durability** | Messages persist even if the service is offline |
+| **Acknowledgment** | Services must confirm processing; unacknowledged messages are re-delivered |
+| **Consumer groups** | Multiple instances of a service can share the workload |
+| **Auto-retry** | Unacknowledged messages are auto-claimed after a timeout |
+
+This is different from how **users** receive changes (fire-and-forget pub/sub). Services get guaranteed delivery.
+
+## Service capabilities
+
+Inside a service's processing logic, the following tools are available:
+
+| Capability | Purpose |
+|------------|---------|
+| Entity search | Find entities matching a query |
+| Child lookup | Look up child entities |
+| Aggregation | Run aggregation queries |
+| File upload | Upload files to cloud storage |
+| Distributed locks | Prevent concurrent processing of the same data |
+| Log broadcast | Send log messages visible to admins in our UI |
+
+## Service queries
+
+Services subscribe using JSON queries that match against entity state:
+
+```json
+{
+  "EDI": { "$exists": true },
+  "Customer": { "$exists": true }
+}
+```
+
+This query matches any entity that has both an `EDI` component and a `Customer` component. The query engine evaluates matches efficiently using a combination of in-memory assertions and database queries.
+
+## Logging
+
+Services can broadcast log messages visible to admin users in our UI. Lifecycle events are logged automatically:
+
+- Processing started — when a batch begins
+- Processing complete — when it succeeds
+- Processing failed — when it fails (includes error details)

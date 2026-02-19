@@ -1,0 +1,102 @@
+---
+title: "EDI Files"
+description: "Electronic Data Interchange — healthcare claims and payment files"
+---
+
+EDI (Electronic Data Interchange) is the standardized format for exchanging healthcare claims and payment data between providers, payers, and clearinghouses. Our platform ingests EDI files via SFTP and parses them into structured entities.
+
+## File types
+
+### 837 — Claims
+
+Submitted healthcare claims. Two sub-types:
+
+| Type | Format | Description |
+|------|--------|-------------|
+| **837-I** | UB-04 (Institutional) | Hospital and facility claims |
+| **837-P** | CMS-1500 (Professional) | Physician and professional service claims |
+
+Each 837 file contains one or more claims, each with:
+- Patient demographics
+- Provider information (attending, billing, consulting)
+- Insurance details (primary, secondary, tertiary)
+- Diagnosis codes (ICD-10)
+- Service lines (individual billable items with CPT/HCPCS codes)
+
+### 835 — Remittances
+
+Payment advice from payers explaining what was paid, denied, or adjusted. Each 835 contains:
+- Payer and payee information
+- Payment amounts and method
+- Per-claim adjustment details
+- Service line-level explanations of benefits (EOBs)
+
+## How EDI is processed
+
+<Steps>
+  <Step title="File ingestion">
+    The file is uploaded to cloud storage and our file processor creates an entity with the raw X12 data and the customer identifier.
+  </Step>
+  <Step title="Background service picks it up">
+    Our EDI parsing service subscribes to entities that contain raw EDI data. When it receives the new entity, it begins parsing.
+  </Step>
+  <Step title="X12 parsing">
+    The raw EDI text is parsed using the X12 standard structure. An EDI file contains nested layers:
+    - **Interchange** (ISA/IEA) — the outer envelope with sender, receiver, and control numbers
+      - **Functional Group** (GS/GE) — groups related transaction sets by type and version
+        - **Transaction Set** (ST/SE) — individual claims (837) or remittances (835)
+  </Step>
+  <Step title="Entity creation">
+    For each claim or remittance found, the service creates new entities with rich components and links them as children of the original EDI entity.
+  </Step>
+</Steps>
+
+## Entities created from EDI
+
+### From 837 (Claims)
+
+Each claim becomes an entity with these components:
+
+| Component | Contents |
+|-----------|----------|
+| `Claim` | Submitter ID, hash (for deduplication), charge amounts, status |
+| `Patient` | Name, date of birth, gender, member ID |
+| `Insurance` | Payer name and ID (primary/secondary/tertiary) |
+| `Provider` | Attending, billing, and consulting provider details |
+| `ServiceLine` | Individual billable items — CPT codes, charges, dates of service |
+| `Address` | Patient and provider addresses |
+| `Interchange` | EDI envelope metadata — control numbers, dates, sender/receiver |
+
+### From 835 (Remittances)
+
+Each remittance becomes an entity with:
+
+| Component | Contents |
+|-----------|----------|
+| `Remit` | Payer ID, payment amount, adjustment reasons |
+| `ServiceLine` | Line-item payment details and adjustment codes |
+| `Interchange` | EDI envelope metadata |
+
+## Deduplication
+
+Claims are deduplicated by **hash**. The hash is computed from core claim fields (submitter ID, patient info, service dates, charges). If a claim with the same hash already exists, the system skips creating a duplicate.
+
+## Entity hierarchy
+
+After parsing, the entities form a tree linked by parent-child edges:
+
+- **EDI File**
+  - **Interchange 1**
+    - Claim 1
+      - ServiceLine A
+      - ServiceLine B
+    - Claim 2
+      - ServiceLine C
+    - Remit 1
+      - ServiceLine D
+      - ServiceLine E
+  - **Interchange 2**
+    - Claim 3
+      - ServiceLine F
+
+All relationships are stored as **entity edges** (parent-child links), making it easy to traverse from an EDI file down to individual service lines.

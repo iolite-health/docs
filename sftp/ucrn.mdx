@@ -1,0 +1,82 @@
+---
+title: "UCRN"
+description: "Universal Claim Record Number — linking accounts to claims"
+---
+
+UCRN (Universal Claim Record Number) is a crosswalk file format that maps **patient account numbers** to **claim numbers**. This is necessary because healthcare claims often don't contain the account number used by the provider's billing system.
+
+## The problem UCRN solves
+
+When a hospital submits claims electronically (via 837 EDI), the claim is identified by a **claim number** (submitter ID). But the hospital's internal billing system tracks patients by **account number**. These are often different identifiers.
+
+Later, when a payer sends back a remittance (835 EDI), it references the **claim number**. To reconcile the payment back to the patient's account, you need a mapping between the two.
+
+| System | Identifier | Example |
+|--------|-----------|---------|
+| Hospital billing | Account Number | `67890` |
+| Submitted claim (837) | Claim Number | `12345` |
+| Payer remittance (835) | Claim Number | `12345` |
+| **UCRN file** | **Maps Account → Claim** | **`67890` → `12345`** |
+
+Without UCRN, there's no way to connect the dots.
+
+## File format
+
+UCRN files are **pipe-delimited CSVs** uploaded to the `UCRN/` SFTP folder.
+
+Required fields:
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| Facility ID | Identifier for the healthcare facility | `FAC001` |
+| Account Number | The provider's internal billing account number | `67890` |
+| Claim Number | The claim submitter ID from the 837 EDI | `12345` |
+| Service Category | `I` (Inpatient) or `O` (Outpatient) | `I` |
+| Pull Date | Date the crosswalk was generated | `2026-02-19` |
+
+Example file:
+```
+FAC001|67890|12345|I|2026-02-19
+FAC001|67891|12346|O|2026-02-19
+FAC001|67892|12347|I|2026-02-19
+```
+
+## How UCRN is processed
+
+<Steps>
+  <Step title="File ingestion">
+    Our file processor reads the pipe-delimited file and creates an entity for each row with the UCRN data and customer identifier.
+  </Step>
+  <Step title="Background service picks it up">
+    Our account creation service subscribes to entities with UCRN data and processes them in batches.
+  </Step>
+  <Step title="Account lookup or creation">
+    For each UCRN entry, the service:
+    1. Searches for an existing Account entity by account number
+    2. If none exists, creates a new Account entity with the customer's slug
+    3. Searches for existing Claim entities by the claim submitter ID
+  </Step>
+  <Step title="Linking">
+    The service links Claims to Accounts via **entity edges** (parent-child relationships). This creates the association that allows the platform to group all claims under a patient account.
+  </Step>
+</Steps>
+
+## Result
+
+After UCRN processing, Claims are linked as children of the Account:
+
+- **Account 67890**
+  - Claim 12345 — linked by UCRN
+  - Claim 12346 — linked by UCRN
+  - Claim 12347 — linked by UCRN
+
+When remittance payments arrive later (via 835 EDI), our remittance association service can trace from the remittance's claim number back to the Account through these links.
+
+## Customer-specific behavior
+
+Different customers may have different account creation logic:
+
+- **Standard UCRN**: Account number comes directly from the UCRN file
+- **Custom logic**: Some customers derive account numbers from claim data (e.g., first 7 characters of the claim submitter ID)
+
+Each service is configured per-customer to handle these variations.

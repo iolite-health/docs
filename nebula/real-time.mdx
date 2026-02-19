@@ -1,0 +1,103 @@
+---
+title: "Real-Time Data Flow"
+description: "How entity changes propagate to users and services via WebSocket"
+---
+
+Every entity change is delivered in real time to connected clients. The mechanism differs for **users** (frontend) and **services** (background processors).
+
+## WebSocket protocol
+
+All real-time communication happens over WebSocket using a JSON protocol with a type discriminator field.
+
+### Events (Server → Client)
+
+| Type | Recipient | Description |
+|------|-----------|-------------|
+| Entity Change | Users | Entity changed matching your subscription |
+| Entity Change (with task) | Services | Entity change requiring acknowledgment |
+| Entity Change Batch | Services | Batch of changes requiring acknowledgment |
+| Subscription Result | Both | Subscribe success/failure |
+| Subscription Refresh | Users | Entity left your subscription — refetch your list |
+| Heartbeat | Both | Connection alive |
+| Log Broadcast | Admins | Service log message |
+
+### Commands (Client → Server)
+
+| Command | Description |
+|---------|-------------|
+| Subscribe | Subscribe to entities matching a query |
+| Unsubscribe | Stop receiving changes |
+| Task Completion | Acknowledge processing complete (services only) |
+| Lock / Unlock | Distributed lock management (services only) |
+| Heartbeat | Keep-alive ping |
+
+## User data flow
+
+<Steps>
+  <Step title="Entity committed">
+    A change is persisted and a checkpoint is created.
+  </Step>
+  <Step title="Broadcast">
+    The change is broadcast to all API nodes via pub/sub.
+  </Step>
+  <Step title="Subscription evaluation">
+    Each node evaluates the change against every connected user's subscriptions. If the entity **matches** the query, an entity change event is sent. If the entity **was being watched but no longer matches**, a refresh event is sent telling the client to refetch its list.
+  </Step>
+</Steps>
+
+<Note>
+  User changes are **fire-and-forget**. Users don't acknowledge receipt. If a user is offline when a change happens, they'll get the current state when they reconnect and subscribe.
+</Note>
+
+### Subscription refresh
+
+When an entity **leaves** a user's subscription (e.g., an account's workstream changes from "DenialManagement" to "None" while a user is viewing the denial queue), a refresh event is sent. This tells the client: "an entity you were watching no longer matches your query — refetch your list."
+
+## Service data flow
+
+<Steps>
+  <Step title="Entity committed">
+    A change is persisted and a checkpoint is created.
+  </Step>
+  <Step title="Query matching">
+    The change is evaluated against all background service queries.
+  </Step>
+  <Step title="Enqueue">
+    Matching changes are enqueued to the service's dedicated message queue.
+  </Step>
+  <Step title="Delivery">
+    The service receives the change event via its WebSocket connection.
+  </Step>
+  <Step title="Acknowledge">
+    The service processes the change and sends an acknowledgment (success or failure).
+  </Step>
+</Steps>
+
+Key difference from users:
+- **Durable** — messages persist even if the service is offline
+- **Acknowledged** — services must confirm processing
+- **Retried** — unacknowledged messages are re-delivered after a timeout
+
+## Multi-node architecture
+
+Our API runs across multiple nodes behind a load balancer. The challenge: a change committed on Node A must reach a user connected to Node B.
+
+Changes are broadcast to all nodes via a pub/sub bus. Each node evaluates the change against its locally connected users' subscriptions and delivers matching events. This ensures every user gets real-time updates regardless of which node they're connected to.
+
+## Change event payload
+
+An entity change event includes:
+
+```json
+{
+  "change": {
+    "entityId": "entity-uuid",
+    "previous": { /* full entity before change, null if creation */ },
+    "current": { /* full entity after change */ },
+    "createdAt": "2026-02-19T14:30:00Z",
+    "createdBy": "user-uuid"
+  }
+}
+```
+
+Both the previous and current state are included, so clients can compute what changed without an additional API call.

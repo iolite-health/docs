@@ -1,0 +1,66 @@
+---
+title: "SFTP Overview"
+description: "How files are ingested into our platform"
+---
+
+Customers upload files via SFTP. Each customer gets a dedicated folder structure backed by cloud storage. When files land, they are automatically parsed and converted into entities in our data engine.
+
+## Infrastructure
+
+Our SFTP system provides:
+
+- **SFTP server** — Secure file upload endpoint for customers
+- **Cloud storage** — Three buckets per tenant:
+  - **Ingestion** — Files land here from SFTP
+  - **Processed** — Successfully parsed files are archived here
+  - **Invalid** — Files that failed validation (triage queue)
+- **File processor** — Parses files and writes entities to our data engine
+
+## Customer folder structure
+
+Each customer gets a set of default folders on the SFTP server:
+
+```
+/{customer-slug}/
+├── EDI/              # 837 claims and 835 remittances
+├── UCRN/             # Account-to-claim crosswalk files
+├── MedicalRecords/   # Supporting medical documentation
+├── Contracts/        # Payer contract documents
+└── Supplemental/     # Additional files
+```
+
+<Note>
+  The folder name determines how files are parsed. A file in the `EDI/` folder is parsed as X12 EDI. A file in `UCRN/` is parsed as a pipe-delimited crosswalk.
+</Note>
+
+## Processing pipeline
+
+<Steps>
+  <Step title="Upload">
+    Customer uploads a file via SFTP. It lands in the ingestion bucket.
+  </Step>
+  <Step title="Validate">
+    The file processor validates the path format: `{customerSlug}/{fileCategory}/{filename}`.
+  </Step>
+  <Step title="Route & parse">
+    Based on the folder:
+    - **EDI/** — X12 parser creates Claim and Remit entities
+    - **UCRN/** — CSV parser creates Account entities and links to Claims
+    - **MedicalRecords/** — Associates documents with existing Claims
+  </Step>
+  <Step title="Persist">
+    Entities are created or updated in our data engine via the API.
+  </Step>
+  <Step title="Archive">
+    The file is moved to the Processed bucket (or Invalid if parsing failed).
+  </Step>
+</Steps>
+
+## What happens next
+
+Once files are parsed into entities, our **background services** pick up the changes in real time to:
+
+- Parse raw EDI data into structured Claim and Remit entities
+- Create Account entities from UCRN crosswalks and link claims
+- Link remittance payments to their corresponding claims
+- Associate medical records with patient claims

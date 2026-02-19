@@ -1,0 +1,47 @@
+---
+title: "Architecture Overview"
+description: "How our platform components fit together"
+---
+
+Our platform is composed of three layers that work together:
+
+| Layer | Role |
+|-------|------|
+| **Data Engine** | Real-time data orchestration, REST API, WebSocket |
+| **UI Layer** | Web application for users to view and manage RCM data |
+| **Background Services** | Subscribe to entity changes, perform automated processing |
+
+## Entity-Component-System (ECS)
+
+Borrowed from game engines, our platform treats **all data as entities**:
+
+- **Entities** are containers with a UUID and composable state
+- **Components** are named data structures attached to entities (e.g., Account, Claim, Patient)
+- **Systems** are services that subscribe to entity changes and react in real time
+
+This means a single entity can represent a claim, a patient record, or an EDI file — the components attached to it define what it is.
+
+<Card title="Deep dive into our data engine" icon="atom" href="/nebula/overview">
+  Learn how the ECS engine works under the hood.
+</Card>
+
+## What happens on each entity change
+
+<Steps>
+  <Step title="Commit">
+    The API receives a **delta** (partial update) with optional relationship changes.
+  </Step>
+  <Step title="Persist">
+    The delta is merged into the current entity state. An immutable **checkpoint** is created recording the previous state, delta, and new state.
+  </Step>
+  <Step title="Fan out to users">
+    The change is broadcast to all API nodes. Each node evaluates it against connected users' subscriptions and delivers matching events via WebSocket.
+  </Step>
+  <Step title="Fan out to services">
+    The change is matched against background service queries and enqueued to a durable message queue. Services must acknowledge after processing.
+  </Step>
+</Steps>
+
+### Multi-node architecture
+
+Our API runs across multiple nodes behind a load balancer. Users connect via WebSocket to whichever node they land on. Changes committed on one node are broadcast to all nodes, ensuring every connected user gets updates regardless of which node they're on.

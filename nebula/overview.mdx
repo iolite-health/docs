@@ -1,0 +1,46 @@
+---
+title: "Data Engine Overview"
+description: "Our real-time Entity-Component-System engine"
+---
+
+<div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '8px' }}>
+  <img src="/images/data-martian.png" alt="Data Martian" width="64" />
+  <span style={{ fontSize: '1.1rem' }}>
+    Our data engine is a real-time platform built on the **Entity-Component-System (ECS)** pattern borrowed from game engines. Every piece of data is an entity, and all changes propagate in real time to connected users and background services.
+  </span>
+</div>
+
+## Why ECS?
+
+Traditional healthcare systems lock data into rigid table schemas. Adding a new field requires migrations, downtime, and risk. ECS inverts this:
+
+- **Entities** are generic containers — they don't care what data they hold
+- **Components** define the data — add or remove them freely without schema changes
+- **Systems** react to data — subscribe to what they care about, ignore the rest
+
+This means you can attach an `Insurance` component to a Claim entity today, and a `DenialReason` component tomorrow, without touching the database schema.
+
+## Core layers
+
+The data engine is organized into three layers:
+
+1. **API Layer** — REST API for reads/writes, WebSocket for real-time subscriptions
+2. **Commit Layer** — validates authorization, merges deltas, creates immutable checkpoints
+3. **Distribution Layer** — fans out changes to users (via pub/sub) and services (via durable message queue)
+
+## Key properties
+
+<CardGroup cols={2}>
+  <Card title="Real-time" icon="bolt">
+    Every entity change is delivered to connected clients within milliseconds via WebSocket.
+  </Card>
+  <Card title="Immutable audit trail" icon="clock-rotate-left">
+    Every change creates an immutable **checkpoint** recording the delta, previous state, and new state. Nothing is ever lost.
+  </Card>
+  <Card title="Composable data" icon="puzzle-piece">
+    Entities gain meaning from the components attached to them. The same entity framework represents claims, patients, accounts, and EDI files.
+  </Card>
+  <Card title="Query subscriptions" icon="filter">
+    Clients subscribe to entities matching a query. When matching entities change, clients are notified. When entities stop matching, clients are told to refresh.
+  </Card>
+</CardGroup>

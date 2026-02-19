@@ -1,0 +1,103 @@
+---
+title: "Entities & Components"
+description: "The fundamental data model — everything is an entity"
+---
+
+In our data engine, **everything is an entity**. A claim, a patient record, an EDI file, an account — they're all the same underlying structure. What makes them different is the **components** attached to them.
+
+## Entity structure
+
+An entity is a dictionary of components, identified by a UUID:
+
+```json
+{
+  "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "_createdBy": "user-uuid",
+  "_createdAt": "2026-02-19T14:30:00Z",
+  "_createdByName": "john@hospital.com",
+  "_ownerId": "user-uuid",
+  "_ownerName": "jane@hospital.com",
+  "Account": {
+    "name": "67890"
+  },
+  "Customer": {
+    "slug": "hospital-xyz"
+  },
+  "AccountStatus": {
+    "workstream": "UnderpaymentsReview",
+    "invoiceStatus": "Open"
+  }
+}
+```
+
+The `_` prefixed fields are metadata. Everything else is a component.
+
+## Components
+
+A component is a named JSON object with a defined schema. Components are:
+
+- **Versioned** — schemas evolve without breaking existing data
+- **Schema-validated** — JSON Schema defines the structure; invalid data is rejected
+- **Composable** — attach any combination of components to any entity
+
+### Common components
+
+| Component | Used on | Key fields |
+|-----------|---------|------------|
+| `Account` | Account entities | `name` (account number) |
+| `Claim` | Claim entities | `submitterId`, `hash`, `charges`, `status` |
+| `Remit` | Remittance entities | `payerId`, `paymentAmount`, `adjustments` |
+| `Patient` | Claims | `name`, `dateOfBirth`, `gender`, `memberId` |
+| `Insurance` | Claims | `payerName`, `payerId` (primary/secondary/tertiary) |
+| `Provider` | Claims | `attending`, `billing`, `consulting` provider details |
+| `ServiceLine` | Service line entities | CPT codes, charges, dates of service |
+| `Customer` | Most entities | `slug` identifying the customer |
+| `EDI` | EDI file entities | Raw X12 data |
+| `UCRN` | UCRN entities | Account number, claim number mapping |
+| `Interchange` | EDI envelope entities | Control numbers, sender/receiver, dates |
+| `AccountStatus` | Accounts | Workstream, invoice status, narrative |
+
+## Entity relationships
+
+Entities are connected through **entity edges** — parent-child links:
+
+- **Account** (parent)
+  - Claim 1 (child)
+  - Claim 2 (child)
+  - Remit 1 (child)
+
+Edges are:
+- **Many-to-many** — an entity can have multiple parents and multiple children
+- **Soft-deletable** — removed links are marked as deleted, not physically removed
+- **Queryable** — API endpoints for fetching children and parents of any entity
+
+## Modifying entities
+
+Entities are updated by submitting a **delta** — a partial update containing only the changed fields:
+
+```json
+{
+  "AccountStatus": {
+    "workstream": "DenialManagement"
+  }
+}
+```
+
+The engine merges the delta into the current state. You can also include relationship changes (add or remove parent-child links) and ownership transfers.
+
+## Checkpoints
+
+Every entity change creates an immutable **checkpoint** containing:
+
+| Field | Description |
+|-------|-------------|
+| **Delta** | What changed — the partial update that was applied |
+| **Previous state** | The full entity before the change |
+| **Current state** | The full entity after the change |
+| **Relationship changes** | Any children added or removed |
+| **Created at / by** | Timestamp and principal who made the change |
+
+Checkpoints enable:
+- **Audit trail** — who changed what, when, and from what state
+- **Point-in-time recovery** — reconstruct entity state at any moment
+- **Change propagation** — checkpoints are what get delivered to users and services
