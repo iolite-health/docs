@@ -31,7 +31,8 @@
               "sftp/overview",
               "sftp/edi",
               "sftp/ucrn",
-              "sftp/accounts"
+              "sftp/accounts",
+              "sftp/large-loads"
             ]
           },
           {

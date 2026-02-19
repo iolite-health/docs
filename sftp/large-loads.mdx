@@ -1,0 +1,62 @@
+---
+title: "Large Data Loads"
+description: "How to handle bulk file uploads that exceed normal SFTP workflows"
+---
+
+Some clients have datasets that are too large for the standard SFTP upload workflow — we're talking tens of gigabytes of EDI files, remittances, or crosswalks that need to be loaded in bulk.
+
+<Warning>
+  Large data loads should **not** flow through our team manually. If a client has bulk data sitting in their own cloud environment (Azure, AWS, GCP), the most efficient path is a **direct upload to our ingestion bucket** — not downloading it to a local machine and re-uploading it.
+</Warning>
+
+## Why manual handoffs don't work
+
+When someone on our team has to sit in the middle of a large data transfer:
+
+- **Download time** — Pulling tens of gigabytes to a local machine takes hours
+- **Re-upload time** — Pushing those files back up to our SFTP or cloud storage takes more hours
+- **Extraction overhead** — Compressed archives need to be unpacked before they can be processed, multiplying the data moved
+- **Fragility** — Long-running transfers from local machines fail due to network interruptions, sleep/shutdown, or bandwidth limits
+- **Wasted effort** — An engineer scripting a one-off transfer is not doing engineering work
+
+A 15GB dataset that could be transferred cloud-to-cloud in minutes can take an entire day when routed through a local machine.
+
+## Recommended approach
+
+<Steps>
+  <Step title="Get the source location">
+    Ask the client where their data currently lives — Azure Blob, AWS S3, GCP Cloud Storage, or an on-prem server.
+  </Step>
+  <Step title="Provide direct upload credentials">
+    Generate temporary, scoped credentials (e.g., pre-signed URLs or a time-limited IAM role) that give the client write access to the correct ingestion path: `/{customer-slug}/{file-category}/`.
+  </Step>
+  <Step title="Client uploads directly">
+    The client (or their IT team) transfers files directly from their environment to our ingestion bucket. Cloud-to-cloud transfers avoid the local machine bottleneck entirely.
+  </Step>
+  <Step title="Validate and process">
+    Once files land in the ingestion bucket, the standard processing pipeline takes over — validation, parsing, and entity creation happen automatically.
+  </Step>
+</Steps>
+
+## When direct upload isn't possible
+
+If the client can't upload directly (e.g., compliance restrictions, no cloud environment, or limited IT support):
+
+| Approach | When to use |
+|----------|-------------|
+| **Cloud-to-cloud transfer** | Client has data in Azure/AWS/GCP — transfer between cloud providers server-side |
+| **Dedicated EC2 instance** | Data needs transformation before upload — spin up an instance in our VPC to avoid local machine bandwidth limits |
+| **Chunked SFTP upload** | Client can only use SFTP — break the dataset into smaller batches and upload over multiple sessions |
+
+<Note>
+  The key principle: **data should move between servers, not through laptops.** Any time a human is downloading and re-uploading gigabytes, there's a better way.
+</Note>
+
+## Planning ahead
+
+When onboarding a new client, ask about data volume early:
+
+- **How large is the initial historical load?** If it's over a few gigabytes, plan for a direct transfer.
+- **What format is the data in?** Compressed archives need extraction — factor that into the approach.
+- **Where does the data live today?** Cloud-to-cloud is always fastest.
+- **What's the ongoing volume?** If regular uploads will be large, set up a repeatable pipeline rather than a one-off process.
